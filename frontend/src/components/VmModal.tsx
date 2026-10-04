@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { VM } from "../types";
-import { X, Server, Cpu, HardDrive, Database, AlertCircle } from "lucide-react";
+import { X, Server, Cpu, HardDrive, Database, AlertCircle, AlertTriangle } from "lucide-react";
 
 interface VmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (vmData: { name: string; cores: number; ram: number; disk: number; os: string; status: "active" | "inactive" }) => Promise<void>;
   editingVm?: VM | null;
+  allVMs: VM[];
 }
 
 const OS_OPTIONS = [
@@ -19,7 +20,11 @@ const OS_OPTIONS = [
   "RedHat Enterprise Linux 9",
 ];
 
-export const VmModal: React.FC<VmModalProps> = ({ isOpen, onClose, onSave, editingVm }) => {
+const HOST_MAX_CORES = 32;
+const HOST_MAX_RAM = 128; // GB
+const HOST_MAX_DISK = 2000; // GB
+
+export const VmModal: React.FC<VmModalProps> = ({ isOpen, onClose, onSave, editingVm, allVMs }) => {
   const [name, setName] = useState("");
   const [cores, setCores] = useState<number>(2);
   const [ram, setRam] = useState<number>(4);
@@ -29,6 +34,24 @@ export const VmModal: React.FC<VmModalProps> = ({ isOpen, onClose, onSave, editi
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [submitting, setSubmitting] = useState(false);
+
+  // Calculate resources used by OTHER active VMs (excluding the one being edited)
+  const otherActiveVMs = allVMs.filter((v) => {
+    if (editingVm && Number(v.id) === Number(editingVm.id)) return false;
+    return v.status === "active";
+  });
+
+  const usedCores = otherActiveVMs.reduce((acc, v) => acc + v.cores, 0);
+  const usedRam = otherActiveVMs.reduce((acc, v) => acc + v.ram, 0);
+  const usedDisk = otherActiveVMs.reduce((acc, v) => acc + v.disk, 0);
+
+  const freeCores = Math.max(0, HOST_MAX_CORES - usedCores);
+  const freeRam = Math.max(0, HOST_MAX_RAM - usedRam);
+  const freeDisk = Math.max(0, HOST_MAX_DISK - usedDisk);
+
+  const isCoresExceeded = status === "active" && cores > freeCores;
+  const isRamExceeded = status === "active" && ram > freeRam;
+  const isDiskExceeded = status === "active" && disk > freeDisk;
 
   useEffect(() => {
     if (editingVm) {
@@ -61,14 +84,14 @@ export const VmModal: React.FC<VmModalProps> = ({ isOpen, onClose, onSave, editi
       errs.name = "Only letters, numbers, hyphens, and underscores allowed";
     }
 
-    if (cores <= 0 || cores > 128) {
-      errs.cores = "Cores must be between 1 and 128";
+    if (cores <= 0 || cores > HOST_MAX_CORES) {
+      errs.cores = `Cores must be between 1 and ${HOST_MAX_CORES}`;
     }
-    if (ram <= 0 || ram > 1024) {
-      errs.ram = "RAM must be between 0.5 and 1024 GB";
+    if (ram <= 0 || ram > HOST_MAX_RAM) {
+      errs.ram = `RAM must be between 0.5 and ${HOST_MAX_RAM} GB`;
     }
-    if (disk < 5 || disk > 100000) {
-      errs.disk = "Disk must be at least 5 GB";
+    if (disk < 5 || disk > HOST_MAX_DISK) {
+      errs.disk = `Disk must be between 5 and ${HOST_MAX_DISK} GB`;
     }
     if (!os) {
       errs.os = "Operating system is required";
@@ -137,35 +160,53 @@ export const VmModal: React.FC<VmModalProps> = ({ isOpen, onClose, onSave, editi
           {/* Cores & RAM Grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">CPU Cores (vCPU)</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                CPU Cores (Max free: {freeCores})
+              </label>
               <div className="relative">
                 <Cpu className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                 <input
                   type="number"
                   min="1"
-                  max="128"
+                  max={HOST_MAX_CORES}
                   value={cores}
                   onChange={(e) => setCores(parseInt(e.target.value) || 1)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl border bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 transition-all ${
+                    isCoresExceeded ? "border-rose-500 focus:ring-rose-500/20" : "border-gray-200 dark:border-gray-700 focus:border-brand-500"
+                  }`}
                 />
               </div>
+              {isCoresExceeded && (
+                <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" /> Exceeds available free cores ({freeCores})
+                </p>
+              )}
               {errors.cores && <p className="mt-1 text-xs text-rose-600">{errors.cores}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">RAM (GB)</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                RAM (Max free: {freeRam} GB)
+              </label>
               <div className="relative">
                 <Database className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                 <input
                   type="number"
                   min="0.5"
                   step="0.5"
-                  max="1024"
+                  max={HOST_MAX_RAM}
                   value={ram}
                   onChange={(e) => setRam(parseFloat(e.target.value) || 0.5)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl border bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 transition-all ${
+                    isRamExceeded ? "border-rose-500 focus:ring-rose-500/20" : "border-gray-200 dark:border-gray-700 focus:border-brand-500"
+                  }`}
                 />
               </div>
+              {isRamExceeded && (
+                <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" /> Exceeds available free RAM ({freeRam} GB)
+                </p>
+              )}
               {errors.ram && <p className="mt-1 text-xs text-rose-600">{errors.ram}</p>}
             </div>
           </div>
@@ -173,18 +214,27 @@ export const VmModal: React.FC<VmModalProps> = ({ isOpen, onClose, onSave, editi
           {/* Disk & OS Grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Disk Storage (GB)</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Disk (Max free: {freeDisk} GB)
+              </label>
               <div className="relative">
                 <HardDrive className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                 <input
                   type="number"
                   min="5"
-                  max="100000"
+                  max={HOST_MAX_DISK}
                   value={disk}
                   onChange={(e) => setDisk(parseInt(e.target.value) || 5)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl border bg-gray-50 dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 transition-all ${
+                    isDiskExceeded ? "border-rose-500 focus:ring-rose-500/20" : "border-gray-200 dark:border-gray-700 focus:border-brand-500"
+                  }`}
                 />
               </div>
+              {isDiskExceeded && (
+                <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" /> Exceeds available free disk ({freeDisk} GB)
+                </p>
+              )}
               {errors.disk && <p className="mt-1 text-xs text-rose-600">{errors.disk}</p>}
             </div>
 

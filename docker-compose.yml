@@ -1,10 +1,8 @@
-version: "3.8"
-
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ifx_vm_backend
     restart: always
     ports:
@@ -14,7 +12,7 @@ services:
       - NODE_ENV=production
       - JWT_SECRET=ifx_vm_super_secret_jwt_key_2026
     volumes:
-      - ./backend/DB:/app/DB
+      - db_data:/app/DB
     networks:
       - ifx-network
 
@@ -30,6 +28,10 @@ services:
       - backend
     networks:
       - ifx-network
+
+volumes:
+  db_data:
+    name: ifx_vm_db_data
 
 networks:
   ifx-network:

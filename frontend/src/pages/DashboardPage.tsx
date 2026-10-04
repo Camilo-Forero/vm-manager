@@ -56,7 +56,7 @@ export const DashboardPage: React.FC = () => {
 
     socket.on("vm:created", (newVm: VM) => {
       setVms((prev) => {
-        if (prev.some((v) => v.id === newVm.id)) return prev;
+        if (prev.some((v) => Number(v.id) === Number(newVm.id))) return prev;
         return [newVm, ...prev];
       });
       setRecentlyUpdatedId(newVm.id);
@@ -65,14 +65,14 @@ export const DashboardPage: React.FC = () => {
     });
 
     socket.on("vm:updated", (updatedVm: VM) => {
-      setVms((prev) => prev.map((v) => (v.id === updatedVm.id ? updatedVm : v)));
+      setVms((prev) => prev.map((v) => (Number(v.id) === Number(updatedVm.id) ? updatedVm : v)));
       setRecentlyUpdatedId(updatedVm.id);
       setTimeout(() => setRecentlyUpdatedId(null), 2000);
       showToast(`VM "${updatedVm.name}" was updated`, "info");
     });
 
     socket.on("vm:deleted", ({ id }: { id: number }) => {
-      setVms((prev) => prev.filter((v) => v.id !== id));
+      setVms((prev) => prev.filter((v) => Number(v.id) !== Number(id)));
       showToast(`VM was deleted`, "info");
     });
 
@@ -83,25 +83,41 @@ export const DashboardPage: React.FC = () => {
 
   // CRUD Operations with Optimistic UI
   const handleSaveVM = async (vmData: { name: string; cores: number; ram: number; disk: number; os: string; status: "active" | "inactive" }) => {
-    if (editingVm) {
-      // Optimistic update
+    if (editingVm && editingVm.id) {
+      const editingId = Number(editingVm.id);
       const previousVms = [...vms];
-      const optimisticVm: VM = { ...editingVm, ...vmData, updatedAt: new Date().toISOString() };
-      setVms((prev) => prev.map((v) => (v.id === editingVm.id ? optimisticVm : v)));
+      const existingVmRecord = vms.find((v) => Number(v.id) === editingId);
+
+      const optimisticVm: VM = {
+        id: editingId,
+        ...vmData,
+        createdAt: existingVmRecord ? existingVmRecord.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Optimistic update using strict numerical ID comparison
+      setVms((prev) => prev.map((v) => (Number(v.id) === editingId ? optimisticVm : v)));
 
       try {
-        await updateVMAPI(editingVm.id, vmData);
+        const res = await updateVMAPI(editingId, vmData);
+        if (res && res.vm) {
+          setVms((prev) => prev.map((v) => (Number(v.id) === editingId ? res.vm : v)));
+        }
         showToast(`VM "${vmData.name}" updated successfully`, "success");
       } catch (err: any) {
-        setVms(previousVms); // Rollback
+        setVms(previousVms); // Rollback on error
         showToast(err.message || "Failed to update VM", "error");
         throw err;
       }
     } else {
       try {
         const res = await createVMAPI(vmData);
-        // Socket or response will add it, but we can also add immediately
-        setVms((prev) => [res.vm, ...prev]);
+        if (res && res.vm) {
+          setVms((prev) => {
+            if (prev.some((v) => Number(v.id) === Number(res.vm.id))) return prev;
+            return [res.vm, ...prev];
+          });
+        }
         showToast(`VM "${vmData.name}" created successfully`, "success");
       } catch (err: any) {
         showToast(err.message || "Failed to create VM", "error");
@@ -111,14 +127,18 @@ export const DashboardPage: React.FC = () => {
   };
 
   const handleToggleStatus = async (vm: VM) => {
+    const targetId = Number(vm.id);
     const newStatus = vm.status === "active" ? "inactive" : "active";
     const previousVms = [...vms];
 
-    // Optimistic UI update
-    setVms((prev) => prev.map((v) => (v.id === vm.id ? { ...v, status: newStatus } : v)));
+    // Optimistic UI update with strict ID check
+    setVms((prev) => prev.map((v) => (Number(v.id) === targetId ? { ...v, status: newStatus } : v)));
 
     try {
-      await updateVMAPI(vm.id, { status: newStatus });
+      const res = await updateVMAPI(targetId, { status: newStatus });
+      if (res && res.vm) {
+        setVms((prev) => prev.map((v) => (Number(v.id) === targetId ? res.vm : v)));
+      }
       showToast(`VM "${vm.name}" is now ${newStatus}`, "success");
     } catch (err: any) {
       setVms(previousVms); // Rollback
@@ -127,14 +147,15 @@ export const DashboardPage: React.FC = () => {
   };
 
   const handleDeleteVM = async () => {
-    if (!deleteId) return;
+    if (deleteId === null) return;
+    const targetId = Number(deleteId);
     const previousVms = [...vms];
 
-    // Optimistic removal
-    setVms((prev) => prev.filter((v) => v.id !== deleteId));
+    // Optimistic removal with strict ID check
+    setVms((prev) => prev.filter((v) => Number(v.id) !== targetId));
 
     try {
-      await deleteVMAPI(deleteId);
+      await deleteVMAPI(targetId);
       showToast("VM deleted successfully", "success");
     } catch (err: any) {
       setVms(previousVms); // Rollback
@@ -277,13 +298,14 @@ export const DashboardPage: React.FC = () => {
         }}
         onSave={handleSaveVM}
         editingVm={editingVm}
+        allVMs={vms}
       />
 
       <DeleteConfirmModal
         isOpen={deleteId !== null}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDeleteVM}
-        vmName={vms.find((v) => v.id === deleteId)?.name}
+        vmName={vms.find((v) => Number(v.id) === Number(deleteId))?.name}
       />
     </div>
   );

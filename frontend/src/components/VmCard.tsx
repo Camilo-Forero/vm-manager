@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { VM, Role } from "../types";
-import { Cpu, HardDrive, Database, Play, Square, Edit3, Trash2, Server, ShieldCheck } from "lucide-react";
+import { Cpu, HardDrive, Database, Play, Square, Edit3, Trash2, Server, AlertTriangle } from "lucide-react";
 
 interface VmCardProps {
   vm: VM;
@@ -10,6 +10,10 @@ interface VmCardProps {
   onToggleStatus: (vm: VM) => void;
   isRecentlyUpdated?: boolean;
 }
+
+const HOST_MAX_CORES = 32;
+const HOST_MAX_RAM = 128; // GB
+const HOST_MAX_DISK = 2000; // GB
 
 export const VmCard: React.FC<VmCardProps> = ({ vm, role, onEdit, onDelete, onToggleStatus, isRecentlyUpdated }) => {
   const [toggling, setToggling] = useState(false);
@@ -21,6 +25,7 @@ export const VmCard: React.FC<VmCardProps> = ({ vm, role, onEdit, onDelete, onTo
   };
 
   const isActive = vm.status === "active";
+  const isOversized = vm.cores > HOST_MAX_CORES || vm.ram > HOST_MAX_RAM || vm.disk > HOST_MAX_DISK;
 
   return (
     <div
@@ -47,17 +52,25 @@ export const VmCard: React.FC<VmCardProps> = ({ vm, role, onEdit, onDelete, onTo
             </div>
           </div>
 
-          {/* Status Badge */}
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
-              isActive
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600"
-            }`}
-          >
-            <span className={`w-2 h-2 rounded-full ${isActive ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`}></span>
-            {isActive ? "Active" : "Inactive"}
-          </span>
+          {/* Status & Warning Badges */}
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
+                isActive
+                  ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${isActive ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`}></span>
+              {isActive ? "Active" : "Inactive"}
+            </span>
+
+            {isOversized && (
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> Exceeds Host Max
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Card Body: Specs Grid */}

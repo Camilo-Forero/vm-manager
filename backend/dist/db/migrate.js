@@ -3,7 +3,10 @@ import fs from "fs";
 import path from "path";
 export async function runMigrations() {
     const db = await getDb();
-    const migrationsFolder = path.resolve(process.cwd(), "DB/Migrations");
+    let migrationsFolder = path.resolve(process.cwd(), "../DB/Migrations");
+    if (!fs.existsSync(migrationsFolder)) {
+        migrationsFolder = path.resolve(process.cwd(), "DB/Migrations");
+    }
     console.log(`Running migrations from ${migrationsFolder}...`);
     try {
         const initSqlPath = path.join(migrationsFolder, "0000_initial.sql");

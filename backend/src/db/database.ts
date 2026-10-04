@@ -4,7 +4,11 @@ import * as schema from "./schema.js";
 import fs from "fs";
 import path from "path";
 
-const dbDir = path.resolve(process.cwd(), "DB");
+// Locate root DB directory
+let dbDir = path.resolve(process.cwd(), "../DB");
+if (!fs.existsSync(dbDir)) {
+  dbDir = path.resolve(process.cwd(), "DB");
+}
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
