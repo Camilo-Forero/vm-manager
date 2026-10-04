@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ifx_vm_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - JWT_SECRET=ifx_vm_super_secret_jwt_key_2026
+    volumes:
+      - ./backend/DB:/app/DB
+    networks:
+      - ifx-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ifx_vm_frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - ifx-network
+
+networks:
+  ifx-network:
+    driver: bridge
